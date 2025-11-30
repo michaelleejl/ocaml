@@ -549,6 +549,7 @@ let extra_rhs_core_type ct ~pos =
 
 type let_binding =
   { lb_pattern: pattern;
+    lb_binder_type: binder_type_flag;
     lb_expression: expression;
     lb_constraint: value_constraint option;
     lb_is_pun: bool;
@@ -562,9 +563,10 @@ type let_bindings =
     lbs_rec: rec_flag;
     lbs_extension: string Asttypes.loc option }
 
-let mklb first ~loc (p, e, typ, is_pun) attrs =
+let mklb first ~loc (p, i, e, typ, is_pun) attrs =
   {
     lb_pattern = p;
+    lb_binder_type = i;
     lb_expression = e;
     lb_constraint=typ;
     lb_is_pun = is_pun;
@@ -594,6 +596,7 @@ let val_of_let_bindings ~loc lbs =
          Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
            ~docs:(Lazy.force lb.lb_docs)
            ~text:(Lazy.force lb.lb_text)
+           ~binder_type:(lb.lb_binder_type)
            ?value_constraint:lb.lb_constraint lb.lb_pattern lb.lb_expression)
       lbs.lbs_bindings
   in
@@ -606,7 +609,9 @@ let expr_of_let_bindings ~loc lbs body =
   let bindings =
     List.map
       (fun lb ->
-         Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
+        match lb.lb_binder_type with 
+        | Destructive -> syntax_error()
+        | Nondestructive -> Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
           ?value_constraint:lb.lb_constraint  lb.lb_pattern lb.lb_expression)
       lbs.lbs_bindings
   in
@@ -617,8 +622,11 @@ let class_of_let_bindings ~loc lbs body =
   let bindings =
     List.map
       (fun lb ->
-         Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
-          ?value_constraint:lb.lb_constraint lb.lb_pattern lb.lb_expression)
+      match lb.lb_binder_type with 
+        | Destructive -> syntax_error()
+        | Nondestructive ->
+            Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
+            ?value_constraint:lb.lb_constraint lb.lb_pattern lb.lb_expression)
       lbs.lbs_bindings
   in
     (* Our use of let_bindings(no_ext) guarantees the following: *)
@@ -2125,10 +2133,13 @@ method_:
     label = mkrhs(label) COLON ty = possibly_poly_type
       { (label, private_, Cfk_virtual ty), attrs }
   | override_flag attributes private_flag mkrhs(label) strict_binding
-      { let e = $5 in
-        let loc = Location.(e.pexp_loc.loc_start, e.pexp_loc.loc_end) in
-        ($4, $3,
-        Cfk_concrete ($1, ghexp ~loc (Pexp_poly (e, None)))), $2 }
+      { let binding_type, e = $5 in
+        match binding_type with 
+          | Destructive -> syntax_error()
+          | Nondestructive -> 
+            let loc = Location.(e.pexp_loc.loc_start, e.pexp_loc.loc_end) in
+            ($4, $3, Cfk_concrete ($1, ghexp ~loc (Pexp_poly (e, None)))), $2 
+      }
   | override_flag attributes private_flag mkrhs(label)
     COLON possibly_poly_type EQUAL seq_expr
       { let poly_exp =
@@ -2714,8 +2725,8 @@ labeled_simple_expr:
 ;
 let_binding_body_no_punning:
     let_ident strict_binding
-      { ($1, $2, None) }
-  | let_ident type_constraint EQUAL seq_expr
+      { let binder, binding = $2 in ($1, binder, binding, None) }
+  | let_ident type_constraint with_let_binder seq_expr
       { let v = $1 in (* PR#7344 *)
         let t =
           match $2 with
@@ -2723,29 +2734,30 @@ let_binding_body_no_punning:
              Pvc_constraint { locally_abstract_univars = []; typ=t }
           | Pcoerce (ground, coercion) -> Pvc_coercion { ground; coercion}
         in
-        (v, $4, Some t)
+        (v, $3, $4, Some t)
         }
-  | let_ident COLON poly(core_type) EQUAL seq_expr
+  | let_ident COLON poly(core_type) with_let_binder seq_expr
     {
       let t = ghtyp ~loc:($loc($3)) $3 in
-      ($1, $5, Some (Pvc_constraint { locally_abstract_univars = []; typ=t }))
+      ($1, $4, $5, Some (Pvc_constraint { locally_abstract_univars = []; typ=t }))
     }
-  | let_ident COLON TYPE lident_list DOT core_type EQUAL seq_expr
+  | let_ident COLON TYPE lident_list DOT core_type with_let_binder seq_expr
     { let constraint' =
         Pvc_constraint { locally_abstract_univars=$4; typ = $6}
       in
-      ($1, $8, Some constraint') }
-  | pattern_no_exn EQUAL seq_expr
-      { ($1, $3, None) }
-  | simple_pattern_not_ident COLON core_type EQUAL seq_expr
-      { ($1, $5, Some(Pvc_constraint { locally_abstract_univars=[]; typ=$3 })) }
+      ($1, $7, $8, Some constraint') }
+  | pattern_no_exn with_let_binder seq_expr
+      { ($1, $2, $3, None) }
+  | simple_pattern_not_ident COLON core_type with_let_binder seq_expr
+      { ($1, $4, $5, Some(Pvc_constraint { locally_abstract_univars=[]; typ=$3 })) }
 ;
+
 let_binding_body:
   | let_binding_body_no_punning
-      { let p,e,c = $1 in (p,e,c,false) }
+      { let p,i,e,c = $1 in (p,i,e,c,false) }
 /* BEGIN AVOID */
   | val_ident %prec below_HASH
-      { (mkpatvar ~loc:$loc $1, mkexpvar ~loc:$loc $1, None, true) }
+      { (mkpatvar ~loc:$loc $1, Nondestructive, mkexpvar ~loc:$loc $1, None, true) }
   (* The production that allows puns is marked so that [make list-parse-errors]
      does not attempt to exploit it. That would be problematic because it
      would then generate bindings such as [let x], which are rejected by the
@@ -2754,6 +2766,10 @@ let_binding_body:
 ;
 (* The formal parameter EXT can be instantiated with ext or no_ext
    so as to indicate whether an extension is allowed or disallowed. *)
+// generic_let_binding_body:
+//   let_subst_binding_body     {$1}
+// | let_binding_body           {$1}
+// ;
 let_bindings(EXT):
     let_binding(EXT)                            { $1 }
   | let_bindings(EXT) and_let_binding           { addlb $1 $2 }
@@ -2781,8 +2797,11 @@ and_let_binding:
     }
 ;
 letop_binding_body:
-    pat = let_ident exp = strict_binding
-      { (pat, exp) }
+    pat = let_ident strict_binding
+      { let binding_type, expr = $2 in match binding_type with 
+           | Destructive -> syntax_error()
+           | Nondestructive -> (pat, expr) 
+      }
   | val_ident
       (* Let-punning *)
       { (mkpatvar ~loc:$loc $1, mkexpvar ~loc:$loc $1) }
@@ -2804,10 +2823,10 @@ letop_bindings:
         let_pat, let_exp, and_ :: rev_ands }
 ;
 strict_binding:
-    EQUAL seq_expr
-      { $2 }
-  | fun_params type_constraint? EQUAL fun_body
-      { ghexp ~loc:$sloc (mkfunction $1 $2 $4)
+    with_let_binder seq_expr
+      { $1, $2 }
+  | fun_params type_constraint? with_let_binder fun_body
+      { $3, ghexp ~loc:$sloc (mkfunction $1 $2 $4)
       }
 ;
 fun_body:
@@ -3619,7 +3638,10 @@ with_type_binder:
     EQUAL          { Public }
   | EQUAL PRIVATE  { Private }
 ;
-
+with_let_binder :
+    EQUAL       { Nondestructive }
+  | COLONEQUAL  { Destructive    }
+;
 /* Polymorphic types */
 
 %inline typevar:

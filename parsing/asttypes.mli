@@ -29,6 +29,8 @@ type constant =
   | Const_int64 of int64
   | Const_nativeint of nativeint
 
+type binder_type_flag = Nondestructive | Destructive 
+
 type rec_flag = Nonrecursive | Recursive
 
 type direction_flag = Upto | Downto

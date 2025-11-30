@@ -1103,6 +1103,7 @@ and value_binding =
   {
     pvb_pat: pattern;
     pvb_expr: expression;
+    pvb_binder_type: binder_type_flag;
     pvb_constraint: value_constraint option;
     pvb_attributes: attributes;
     pvb_loc: Location.t;

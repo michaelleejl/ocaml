@@ -31,6 +31,8 @@ type constant =
 
 type rec_flag = Nonrecursive | Recursive
 
+type binder_type_flag = Nondestructive | Destructive
+
 type direction_flag = Upto | Downto
 
 (* Order matters, used in polymorphic comparison *)
