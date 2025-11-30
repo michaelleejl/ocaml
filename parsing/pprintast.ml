@@ -1190,6 +1190,7 @@ and class_field ctxt f x =
               ppat_loc=Location.none;
               ppat_loc_stack=[];
               ppat_attributes=[]};
+           pvb_binder_type=Nondestructive;
            pvb_expr=e;
            pvb_constraint=None;
            pvb_attributes=[];
