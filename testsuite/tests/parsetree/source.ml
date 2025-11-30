@@ -7551,3 +7551,7 @@ let () =
   let module%foo M = P(A) [@@foo] in
   let%e[@foo] x = 12 in
   ()
+
+(* private lets *)
+let f := 2 
+let g x := x 
