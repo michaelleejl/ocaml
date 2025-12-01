@@ -334,6 +334,7 @@ and value_binding =
   {
     vb_pat: pattern;
     vb_expr: expression;
+    vb_binder_type: binder_type_flag;
     vb_rec_kind: Value_rec_types.recursive_binding_kind;
     vb_attributes: attributes;
     vb_loc: Location.t;

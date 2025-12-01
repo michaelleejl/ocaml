@@ -141,7 +141,9 @@ let name_expression ~loc ~attrs exp =
        vb_expr = exp;
        vb_rec_kind = Dynamic;
        vb_attributes = attrs;
-       vb_loc = loc; }
+       vb_loc = loc; 
+       vb_binder_type = Nondestructive;
+       }
    in
    let item =
      { str_desc = Tstr_value(Nonrecursive, [vb]);

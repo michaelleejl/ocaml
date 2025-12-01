@@ -3235,12 +3235,12 @@ let maybe_expansive e = not (is_nonexpansive e)
 let annotate_recursive_bindings env valbinds =
   let ids = let_bound_idents valbinds in
   List.map
-    (fun {vb_pat; vb_expr; vb_rec_kind = _; vb_attributes; vb_loc} ->
+    (fun {vb_pat; vb_expr; vb_rec_kind = _; vb_attributes; vb_loc; vb_binder_type} ->
        match (Value_rec_check.is_valid_recursive_expression ids vb_expr) with
        | None ->
          raise(Error(vb_expr.exp_loc, env, Illegal_letrec_expr))
        | Some vb_rec_kind ->
-         { vb_pat; vb_expr; vb_rec_kind; vb_attributes; vb_loc})
+         { vb_pat; vb_expr; vb_rec_kind; vb_attributes; vb_loc; vb_binder_type})
     valbinds
 
 let check_recursive_class_bindings env ids exprs =
@@ -5937,6 +5937,7 @@ and type_argument ?explanation ?recarg env sarg ty_expected' ty_expected =
            Texp_let (Nonrecursive,
                      [{vb_pat=let_pat; vb_expr=texp; vb_attributes=[];
                        vb_loc=Location.none; vb_rec_kind = Dynamic;
+                       vb_binder_type=Nondestructive
                       }],
                      func let_var) }
       end
@@ -6694,7 +6695,7 @@ and type_let ?check ?check_strict
       (fun ((p, _), (e, _)) pvb ->
         (* vb_rec_kind will be computed later for recursive bindings *)
         {vb_pat=p; vb_expr=e; vb_attributes=pvb.pvb_attributes;
-         vb_loc=pvb.pvb_loc; vb_rec_kind = Dynamic;
+         vb_loc=pvb.pvb_loc; vb_binder_type=pvb.pvb_binder_type; vb_rec_kind = Dynamic;
         })
       l spat_sexp_list
   in
