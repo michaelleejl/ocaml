@@ -2796,10 +2796,13 @@ and type_str_item ~names ~toplevel ~funct_body anchor env shape_map
            will be marked as being used during the signature inclusion test. *)
         let items, shape_map =
           List.fold_left
-            (fun (acc, shape_map) (id, { Asttypes.loc; _ }, _typ, _uid)->
+            (fun (acc, shape_map) (id, { Asttypes.loc; _ }, _typ, _uid, bind_type)->
+              let vis = match bind_type with 
+                | Destructive -> Hidden 
+                | Nondestructive -> Exported in 
               Signature_names.check_value names loc id;
               let vd =  Env.find_value (Pident id) newenv in
-              Sig_value(id, vd, Exported) :: acc,
+              Sig_value(id, vd, vis) :: acc,
               Shape.Map.add_value shape_map id vd.val_uid
             )
             ([], shape_map)
