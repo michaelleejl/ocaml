@@ -2797,13 +2797,13 @@ and type_str_item ~names ~toplevel ~funct_body anchor env shape_map
         let items, shape_map =
           List.fold_left
             (fun (acc, shape_map) (id, { Asttypes.loc; _ }, _typ, _uid, bind_type)->
-              let vis = match bind_type with 
-                | Destructive -> Hidden 
-                | Nondestructive -> Exported in 
               Signature_names.check_value names loc id;
               let vd =  Env.find_value (Pident id) newenv in
-              Sig_value(id, vd, vis) :: acc,
-              Shape.Map.add_value shape_map id vd.val_uid
+              let shape_map = Shape.Map.add_value shape_map id vd.val_uid in 
+              match bind_type with
+                | Destructive -> acc, shape_map 
+                | Nondestructive -> Sig_value(id, vd, Exported) :: acc, shape_map
+              
             )
             ([], shape_map)
             (let_bound_idents_full defs)
